@@ -73,7 +73,15 @@ def _convert_videos(
     if dataset_attr.load_from in ["script", "file"]:
         for i in range(len(videos)):
             if isinstance(videos[i], str) and os.path.isfile(os.path.join(data_args.image_dir, videos[i])):
+                # Handle video file
                 videos[i] = os.path.join(data_args.image_dir, videos[i])
+            elif isinstance(videos[i], list) and len(videos[i]) > 0:
+                # Handle list of frames
+                for j in range(len(videos[i])):
+                    if isinstance(videos[i][j], str) and os.path.isfile(
+                        os.path.join(data_args.image_dir, videos[i][j])
+                    ):
+                        videos[i][j] = os.path.join(data_args.image_dir, videos[i][j])
 
     return videos
 
@@ -170,9 +178,10 @@ def convert_sharegpt(
             logger.warning_rank0(f"Invalid role tag in {messages}.")
             broken_data = True
 
-        aligned_messages.append(
-            {"role": tag_mapping[message[dataset_attr.role_tag]], "content": message[dataset_attr.content_tag]}
-        )
+        aligned_messages.append({
+            "role": tag_mapping[message[dataset_attr.role_tag]],
+            "content": message[dataset_attr.content_tag],
+        })
 
     if (not dataset_attr.ranking and len(aligned_messages) % 2 != 0) or (
         dataset_attr.ranking and len(aligned_messages) % 2 == 0

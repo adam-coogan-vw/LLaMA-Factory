@@ -131,27 +131,37 @@ class BasePlugin:
 
         return results
 
+    def _extract_video_frames_list(self, videos: Sequence["VideoInput"], **kwargs) -> List[List["ImageObject"]]:
+        results = []
+        for video in videos:
+            if isinstance(video, list):
+                # Handle list of frames
+                frames = [Image.open(frame_path) for frame_path in video]
+                if "video_maxlen" in kwargs:
+                    frames = frames[: kwargs["video_maxlen"]]
+            else:
+                # Handle video file
+                container = av.open(video, "r")
+                video_stream = next(stream for stream in container.streams if stream.type == "video")
+                total_frames = video_stream.frames
+                sample_frames = self._get_video_sample_frames(video_stream, **kwargs)
+                sample_indices = np.linspace(0, total_frames - 1, sample_frames).astype(np.int32)
+                frames: List["ImageObject"] = []
+                container.seek(0)
+                for frame_idx, frame in enumerate(container.decode(video_stream)):
+                    if frame_idx in sample_indices:
+                        frames.append(frame.to_image())
+
+            results.append(frames)
+
+        return results
+
     def _regularize_videos(self, videos: Sequence["VideoInput"], **kwargs) -> List[List["ImageObject"]]:
         r"""
         Regularizes videos to avoid error. Including reading, resizing and converting.
         """
-        results = []
-        for video in videos:
-            container = av.open(video, "r")
-            video_stream = next(stream for stream in container.streams if stream.type == "video")
-            total_frames = video_stream.frames
-            sample_frames = self._get_video_sample_frames(video_stream, **kwargs)
-            sample_indices = np.linspace(0, total_frames - 1, sample_frames).astype(np.int32)
-            frames: List["ImageObject"] = []
-            container.seek(0)
-            for frame_idx, frame in enumerate(container.decode(video_stream)):
-                if frame_idx in sample_indices:
-                    frames.append(frame.to_image())
-
-            frames = self._regularize_images(frames, **kwargs)
-            results.append(frames)
-
-        return results
+        results = self._extract_video_frames_list(videos, **kwargs)
+        return [self._regularize_images(frames, **kwargs) for frames in results]
 
     def _get_mm_inputs(
         self,
@@ -564,24 +574,15 @@ class Qwen2vlPlugin(BasePlugin):
 
     @override
     def _regularize_videos(self, videos: Sequence["VideoInput"], **kwargs) -> List[List["ImageObject"]]:
-        results = []
-        for video in videos:
-            container = av.open(video, "r")
-            video_stream = next(stream for stream in container.streams if stream.type == "video")
-            total_frames = video_stream.frames
-            sample_frames = self._get_video_sample_frames(video_stream, **kwargs)
-            sample_indices = np.linspace(0, total_frames - 1, sample_frames).astype(np.int32)
-            frames: List["ImageObject"] = []
-            container.seek(0)
-            for frame_idx, frame in enumerate(container.decode(video_stream)):
-                if frame_idx in sample_indices:
-                    frames.append(frame.to_image())
+        results = self._extract_video_frames_list(videos, **kwargs)
+        for i in range(len(results)):
+            frames = results[i]
 
             if len(frames) % 2 != 0:  # qwen2-vl requires even number of frames
                 frames.append(frames[-1])
 
             frames = self._regularize_images(frames, **kwargs)
-            results.append(frames)
+            results[i] = frames
 
         return results
 
