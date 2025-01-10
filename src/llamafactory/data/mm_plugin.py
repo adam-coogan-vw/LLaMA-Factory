@@ -38,7 +38,7 @@ if TYPE_CHECKING:
         bytes: Optional[bytes]
 
     ImageInput = Union[str, bytes, EncodedImage, ImageObject]
-    VideoInput = str
+    VideoInput = Union[str, list[str]]
 
 
 def _get_paligemma_token_type_ids(
@@ -132,6 +132,9 @@ class BasePlugin:
         return results
 
     def _extract_video_frames_list(self, videos: Sequence["VideoInput"], **kwargs) -> List[List["ImageObject"]]:
+        """
+        Extracts frames from a video or loads a list of frames.
+        """
         results = []
         for video in videos:
             if isinstance(video, list):
